@@ -31,4 +31,21 @@ class InputEditorTest {
     @Test fun closeParenAfterOperatorIgnored() = assertEquals("(2+", InputEditor.closeParen("(2+"))
 
     @Test fun backspace() = assertEquals("12", InputEditor.backspace("123"))
+    @Test fun backspaceRemovesWholeFunction() = assertEquals("5+", InputEditor.backspace("5+sin("))
+    @Test fun backspaceRemovesSqrt() = assertEquals("2×", InputEditor.backspace("2×√("))
+
+    @Test fun functionOnEmpty() = assertEquals("sin(", InputEditor.appendFunction("", "sin"))
+    @Test fun functionAfterDigitMultiplies() = assertEquals("2×cos(", InputEditor.appendFunction("2", "cos"))
+    @Test fun functionAfterOperator() = assertEquals("2+ln(", InputEditor.appendFunction("2+", "ln"))
+    @Test fun sqrtAfterOpenParen() = assertEquals("(√(", InputEditor.appendFunction("(", "√"))
+
+    @Test fun constantAfterDigitMultiplies() = assertEquals("2×π", InputEditor.appendConstant("2", 'π'))
+    @Test fun constantOnEmpty() = assertEquals("e", InputEditor.appendConstant("", 'e'))
+    @Test fun digitAfterConstantMultiplies() = assertEquals("π×2", InputEditor.appendDigit("π", '2'))
+
+    @Test fun square() = assertEquals("3^2", InputEditor.appendSquare("3"))
+    @Test fun squareAfterOperatorIgnored() = assertEquals("3+", InputEditor.appendSquare("3+"))
+    @Test fun negativeExponentAllowed() = assertEquals("5^−", InputEditor.appendOperator("5^", '−'))
+    @Test fun powerReplacesOperator() = assertEquals("5^", InputEditor.appendOperator("5+", '^'))
+    @Test fun closeParenAfterPowerIgnored() = assertEquals("(5^", InputEditor.closeParen("(5^"))
 }

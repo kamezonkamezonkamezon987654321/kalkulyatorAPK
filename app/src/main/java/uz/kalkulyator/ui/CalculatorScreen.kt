@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,12 +27,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import uz.kalkulyator.CalculatorUiState
 import uz.kalkulyator.CalculatorViewModel
 import uz.kalkulyator.calc.HistoryEntry
+
+private val SCIENTIFIC_ROWS = listOf(
+    listOf("sin", "cos", "tan", "ln", "log"),
+    listOf("√", "xʸ", "x²", "π", "e"),
+)
 
 private val KEY_ROWS = listOf(
     listOf("C", "(", ")", "÷"),
@@ -59,15 +66,26 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
                 TextButton(onClick = vm::toggleHistory) {
                     Text(if (state.showHistory) "← Kalkulyator" else "Tarix (${state.history.size})")
                 }
-                if (state.showHistory && state.history.isNotEmpty()) {
-                    TextButton(onClick = vm::clearHistory) { Text("Tozalash") }
+                if (state.showHistory) {
+                    if (state.history.isNotEmpty()) {
+                        TextButton(onClick = vm::clearHistory) { Text("Tozalash") }
+                    }
+                } else {
+                    Row {
+                        if (state.scientific) {
+                            TextButton(onClick = vm::toggleAngleMode) { Text(state.angleMode.name) }
+                        }
+                        TextButton(onClick = vm::toggleScientific) {
+                            Text(if (state.scientific) "Oddiy" else "f(x)")
+                        }
+                    }
                 }
             }
             if (state.showHistory) {
                 HistoryList(state.history, vm::useHistoryEntry, Modifier.weight(1f))
             } else {
                 Display(state, Modifier.weight(1f))
-                Keypad(vm::onKey)
+                Keypad(state.scientific, vm::onKey)
             }
         }
     }
@@ -102,35 +120,47 @@ private fun Display(state: CalculatorUiState, modifier: Modifier) {
 }
 
 @Composable
-private fun Keypad(onKey: (String) -> Unit) {
+private fun Keypad(scientific: Boolean, onKey: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val height = if (scientific) 54.dp else 68.dp
+    val rows = if (scientific) SCIENTIFIC_ROWS + KEY_ROWS else KEY_ROWS
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        KEY_ROWS.forEach { row ->
+        rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { key ->
                     val (bg, fg) = when (key) {
                         "C" -> colors.errorContainer to colors.onErrorContainer
                         "÷", "×", "−", "+" -> colors.primaryContainer to colors.onPrimaryContainer
+                        in SCIENTIFIC_ROWS[0], in SCIENTIFIC_ROWS[1] ->
+                            colors.tertiaryContainer to colors.onTertiaryContainer
                         "(", ")", "%", "⌫" -> colors.secondaryContainer to colors.onSecondaryContainer
                         else -> colors.surfaceVariant to colors.onSurfaceVariant
                     }
-                    KeyButton(key, bg, fg, Modifier.weight(1f)) { onKey(key) }
+                    KeyButton(key, bg, fg, height, Modifier.weight(1f)) { onKey(key) }
                 }
             }
         }
-        KeyButton("=", colors.primary, colors.onPrimary, Modifier.fillMaxWidth()) { onKey("=") }
+        KeyButton("=", colors.primary, colors.onPrimary, height, Modifier.fillMaxWidth()) { onKey("=") }
     }
 }
 
 @Composable
-private fun KeyButton(label: String, bg: Color, fg: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun KeyButton(
+    label: String,
+    bg: Color,
+    fg: Color,
+    height: Dp,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(68.dp),
+        modifier = modifier.height(height),
         shape = RoundedCornerShape(18.dp),
+        contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
     ) {
-        Text(label, fontSize = 26.sp)
+        Text(label, fontSize = if (label.length > 1) 20.sp else 26.sp)
     }
 }
 

@@ -3,16 +3,29 @@ package uz.kalkulyator.calc
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import kotlin.math.abs
 
 class CalcException(message: String) : Exception(message)
+
+enum class AngleMode { DEG, RAD }
 
 object ExpressionEvaluator {
     private val CALC_MC = MathContext(34, RoundingMode.HALF_EVEN)
     private val DISPLAY_MC = MathContext(15, RoundingMode.HALF_EVEN)
     private val HUNDRED = BigDecimal(100)
+    private val PI = BigDecimal("3.141592653589793238462643383279503")
+    private val E = BigDecimal("2.718281828459045235360287471352662")
+    private val LARGE = BigDecimal("1e15")
+    private val SMALL = BigDecimal("1e-9")
 
-    fun evaluate(input: String): BigDecimal {
-        val parser = Parser(normalize(input))
+    // Double-based functions return values like 1.2e-16 for sin(180°); treat these as exact zero.
+    private const val ZERO_EPS = 1e-12
+    private const val MAX_EXACT_POWER = 9999
+
+    val FUNCTIONS = listOf("sin", "cos", "tan", "log", "ln")
+
+    fun evaluate(input: String, angle: AngleMode = AngleMode.DEG): BigDecimal {
+        val parser = Parser(normalize(input), angle)
         try {
             val value = parser.parseExpression()
             parser.expectEnd()
@@ -22,9 +35,15 @@ object ExpressionEvaluator {
         }
     }
 
+    // Very large/small results use "m×10^n", which evaluate() can parse back.
     fun format(value: BigDecimal): String {
         val rounded = value.round(DISPLAY_MC).stripTrailingZeros()
-        return if (rounded.signum() == 0) "0" else rounded.toPlainString()
+        if (rounded.signum() == 0) return "0"
+        val absValue = rounded.abs()
+        if (absValue < LARGE && absValue >= SMALL) return rounded.toPlainString()
+        val exponent = rounded.precision() - rounded.scale() - 1
+        val mantissa = rounded.movePointLeft(exponent).stripTrailingZeros().toPlainString()
+        return "$mantissa×10^$exponent"
     }
 
     private fun normalize(s: String): String =
@@ -34,10 +53,20 @@ object ExpressionEvaluator {
             .replace(',', '.')
             .filterNot { it.isWhitespace() }
 
-    // Grammar: expr = term (('+'|'-') term)* ; term = factor (('*'|'/') factor)* ;
-    // factor = ('-'|'+') factor | primary '%'* ; primary = number | '(' expr ')'?
+    private fun fromDouble(d: Double): BigDecimal {
+        if (!d.isFinite()) throw CalcException("Hisoblab bo'lmadi")
+        return BigDecimal.valueOf(d).round(DISPLAY_MC)
+    }
+
+    // Grammar:
+    //   expr    = term (('+'|'-') term)*
+    //   term    = unary (('*'|'/') unary)*
+    //   unary   = ('-'|'+') unary | power
+    //   power   = postfix ('^' unary)?          right-associative, binds tighter than unary minus
+    //   postfix = primary '%'*
+    //   primary = number | constant | '(' expr ')' | func '(' expr ')' | '√' postfix
     // A missing ')' at the end of input is closed implicitly.
-    private class Parser(private val s: String) {
+    private class Parser(private val s: String, private val angle: AngleMode) {
         private var pos = 0
 
         fun expectEnd() {
@@ -57,13 +86,13 @@ object ExpressionEvaluator {
         }
 
         private fun parseTerm(): BigDecimal {
-            var left = parseFactor()
+            var left = parseUnary()
             while (pos < s.length) {
                 left = when (s[pos]) {
-                    '*' -> { pos++; left.multiply(parseFactor(), CALC_MC) }
+                    '*' -> { pos++; left.multiply(parseUnary(), CALC_MC) }
                     '/' -> {
                         pos++
-                        val right = parseFactor()
+                        val right = parseUnary()
                         if (right.signum() == 0) throw CalcException("Nolga bo'lish mumkin emas")
                         left.divide(right, CALC_MC)
                     }
@@ -73,9 +102,22 @@ object ExpressionEvaluator {
             return left
         }
 
-        private fun parseFactor(): BigDecimal {
-            if (pos < s.length && s[pos] == '-') { pos++; return parseFactor().negate() }
-            if (pos < s.length && s[pos] == '+') { pos++; return parseFactor() }
+        private fun parseUnary(): BigDecimal {
+            if (pos < s.length && s[pos] == '-') { pos++; return parseUnary().negate() }
+            if (pos < s.length && s[pos] == '+') { pos++; return parseUnary() }
+            return parsePower()
+        }
+
+        private fun parsePower(): BigDecimal {
+            val base = parsePostfix()
+            if (pos < s.length && s[pos] == '^') {
+                pos++
+                return power(base, parseUnary())
+            }
+            return base
+        }
+
+        private fun parsePostfix(): BigDecimal {
             var value = parsePrimary()
             while (pos < s.length && s[pos] == '%') {
                 pos++
@@ -87,17 +129,41 @@ object ExpressionEvaluator {
         private fun parsePrimary(): BigDecimal {
             if (pos >= s.length) throw CalcException("Ifoda tugallanmagan")
             val c = s[pos]
-            if (c == '(') {
-                pos++
-                val value = parseExpression()
-                if (pos < s.length) {
-                    if (s[pos] != ')') throw CalcException("Kutilmagan belgi: '${s[pos]}'")
-                    pos++
-                }
-                return value
+            return when {
+                c == '(' -> { pos++; parseGroupRest() }
+                c == '√' -> { pos++; sqrt(parsePostfix()) }
+                c in '0'..'9' || c == '.' -> parseNumber()
+                c.isLetter() -> parseWord()
+                else -> throw CalcException("Kutilmagan belgi: '$c'")
             }
-            if (c in '0'..'9' || c == '.') return parseNumber()
-            throw CalcException("Kutilmagan belgi: '$c'")
+        }
+
+        private fun parseGroupRest(): BigDecimal {
+            val value = parseExpression()
+            if (pos < s.length) {
+                if (s[pos] != ')') throw CalcException("Kutilmagan belgi: '${s[pos]}'")
+                pos++
+            }
+            return value
+        }
+
+        private fun parseWord(): BigDecimal {
+            val start = pos
+            while (pos < s.length && s[pos].isLetter()) pos++
+            val word = s.substring(start, pos)
+            when (word) {
+                "π" -> return PI
+                "e" -> return E
+            }
+            if (word !in FUNCTIONS) throw CalcException("Noma'lum funksiya: $word")
+            if (pos >= s.length || s[pos] != '(') throw CalcException("$word dan keyin '(' kerak")
+            pos++
+            val arg = parseGroupRest()
+            return when (word) {
+                "sin", "cos", "tan" -> trig(word, arg)
+                "log" -> logarithm(arg, Math::log10)
+                else -> logarithm(arg, Math::log)
+            }
         }
 
         private fun parseNumber(): BigDecimal {
@@ -106,6 +172,40 @@ object ExpressionEvaluator {
             val text = s.substring(start, pos)
             if (text == "." || text.count { it == '.' } > 1) throw CalcException("Noto'g'ri son: $text")
             return BigDecimal(text)
+        }
+
+        private fun trig(name: String, arg: BigDecimal): BigDecimal {
+            val rad = if (angle == AngleMode.DEG) Math.toRadians(arg.toDouble()) else arg.toDouble()
+            val result = when (name) {
+                "sin" -> Math.sin(rad)
+                "cos" -> Math.cos(rad)
+                else -> {
+                    if (abs(Math.cos(rad)) < ZERO_EPS) throw CalcException("tan aniqlanmagan")
+                    Math.tan(rad)
+                }
+            }
+            return fromDouble(if (abs(result) < ZERO_EPS) 0.0 else result)
+        }
+
+        private fun logarithm(arg: BigDecimal, fn: (Double) -> Double): BigDecimal {
+            if (arg.signum() <= 0) throw CalcException("Logarifm faqat musbat son uchun")
+            return fromDouble(fn(arg.toDouble()))
+        }
+
+        private fun sqrt(arg: BigDecimal): BigDecimal {
+            if (arg.signum() < 0) throw CalcException("Manfiy sondan ildiz yo'q")
+            return fromDouble(Math.sqrt(arg.toDouble()))
+        }
+
+        private fun power(base: BigDecimal, exponent: BigDecimal): BigDecimal {
+            val intExp = try { exponent.intValueExact() } catch (e: ArithmeticException) { null }
+            if (intExp != null && abs(intExp) <= MAX_EXACT_POWER) {
+                if (base.signum() == 0 && intExp < 0) throw CalcException("Nolga bo'lish mumkin emas")
+                return base.pow(intExp, CALC_MC)
+            }
+            val result = Math.pow(base.toDouble(), exponent.toDouble())
+            if (result.isNaN()) throw CalcException("Hisoblab bo'lmadi")
+            return fromDouble(result)
         }
     }
 }
