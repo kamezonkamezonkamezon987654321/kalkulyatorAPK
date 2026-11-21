@@ -3,7 +3,9 @@ package uz.kalkulyator.calc
 object InputEditor {
     const val OPERATORS = "+−×÷^"
     private const val CONSTANTS = "πe"
-    private val FUNCTION_TOKENS = ExpressionEvaluator.FUNCTIONS.map { "$it(" } + "√("
+    // Longest first, so "arcsin(" is removed whole instead of matching its "sin(" suffix.
+    private val FUNCTION_TOKENS =
+        (ExpressionEvaluator.FUNCTIONS.map { "$it(" } + "√(").sortedByDescending { it.length }
 
     fun appendDigit(expr: String, digit: Char): String {
         if (endsWithValueCloser(expr)) return expr + "×" + digit

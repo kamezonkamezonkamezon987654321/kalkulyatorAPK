@@ -22,6 +22,7 @@ data class CalculatorUiState(
     val history: List<HistoryEntry> = emptyList(),
     val showHistory: Boolean = false,
     val scientific: Boolean = false,
+    val inverse: Boolean = false,
     val angleMode: AngleMode = AngleMode.DEG,
 )
 
@@ -49,6 +50,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             "C" -> ""
             "⌫" -> InputEditor.backspace(expr)
             "=" -> { evaluate(); return }
+            "inv" -> { _state.update { it.copy(inverse = !it.inverse) }; return }
             "(" -> InputEditor.openParen(fresh)
             ")" -> InputEditor.closeParen(expr)
             "%" -> InputEditor.appendPercent(expr)

@@ -6,7 +6,8 @@ Android uchun tarixli kalkulyator (Kotlin + Jetpack Compose).
 
 - Qo'shish, ayirish, ko'paytirish, bo'lish, foiz (`%`), qavslar
 - Aniq o'nlik hisob: `0.1 + 0.2 = 0.3` (BigDecimal)
-- **Ilmiy rejim** (`f(x)` tugmasi): `sin`, `cos`, `tan`, `ln`, `log`, `√`, `xʸ`, `x²`, `π`, `e`.
+- **Ilmiy rejim** (`f(x)` tugmasi): `sin`, `cos`, `tg`, `ctg`, `ln`, `log`, `√`, `xʸ`, `x²`, `π`, `e`.
+  `inv` tugmasi teskari funksiyalarga almashtiradi: `arcsin`, `arccos`, `arctg`, `arcctg`.
   Burchaklar uchun `DEG` (gradus) va `RAD` (radian) almashtirgich bor
 - Juda katta va juda kichik natijalar `1.5×10^-12` ko'rinishida chiqadi
 - Yozish davomida natija oldindan ko'rinadi

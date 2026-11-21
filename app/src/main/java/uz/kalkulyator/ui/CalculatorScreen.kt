@@ -35,10 +35,13 @@ import uz.kalkulyator.CalculatorUiState
 import uz.kalkulyator.CalculatorViewModel
 import uz.kalkulyator.calc.HistoryEntry
 
-private val SCIENTIFIC_ROWS = listOf(
-    listOf("sin", "cos", "tan", "ln", "log"),
-    listOf("√", "xʸ", "x²", "π", "e"),
+private fun scientificRows(inverse: Boolean) = listOf(
+    if (inverse) listOf("inv", "arcsin", "arccos", "arctg", "arcctg", "ln")
+    else listOf("inv", "sin", "cos", "tg", "ctg", "ln"),
+    listOf("log", "√", "xʸ", "x²", "π", "e"),
 )
+
+private val SCIENTIFIC_KEYS = (scientificRows(false) + scientificRows(true)).flatten().toSet()
 
 private val KEY_ROWS = listOf(
     listOf("C", "(", ")", "÷"),
@@ -85,7 +88,7 @@ fun CalculatorScreen(vm: CalculatorViewModel = viewModel()) {
                 HistoryList(state.history, vm::useHistoryEntry, Modifier.weight(1f))
             } else {
                 Display(state, Modifier.weight(1f))
-                Keypad(state.scientific, vm::onKey)
+                Keypad(state.scientific, state.inverse, vm::onKey)
             }
         }
     }
@@ -120,10 +123,10 @@ private fun Display(state: CalculatorUiState, modifier: Modifier) {
 }
 
 @Composable
-private fun Keypad(scientific: Boolean, onKey: (String) -> Unit) {
+private fun Keypad(scientific: Boolean, inverse: Boolean, onKey: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val height = if (scientific) 54.dp else 68.dp
-    val rows = if (scientific) SCIENTIFIC_ROWS + KEY_ROWS else KEY_ROWS
+    val height = if (scientific) 52.dp else 68.dp
+    val rows = if (scientific) scientificRows(inverse) + KEY_ROWS else KEY_ROWS
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -131,8 +134,9 @@ private fun Keypad(scientific: Boolean, onKey: (String) -> Unit) {
                     val (bg, fg) = when (key) {
                         "C" -> colors.errorContainer to colors.onErrorContainer
                         "÷", "×", "−", "+" -> colors.primaryContainer to colors.onPrimaryContainer
-                        in SCIENTIFIC_ROWS[0], in SCIENTIFIC_ROWS[1] ->
-                            colors.tertiaryContainer to colors.onTertiaryContainer
+                        "inv" -> if (inverse) colors.tertiary to colors.onTertiary
+                        else colors.tertiaryContainer to colors.onTertiaryContainer
+                        in SCIENTIFIC_KEYS -> colors.tertiaryContainer to colors.onTertiaryContainer
                         "(", ")", "%", "⌫" -> colors.secondaryContainer to colors.onSecondaryContainer
                         else -> colors.surfaceVariant to colors.onSurfaceVariant
                     }
@@ -160,7 +164,12 @@ private fun KeyButton(
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
     ) {
-        Text(label, fontSize = if (label.length > 1) 20.sp else 26.sp)
+        val fontSize = when {
+            label.length >= 5 -> 13.sp
+            label.length > 1 -> 17.sp
+            else -> 24.sp
+        }
+        Text(label, fontSize = fontSize, maxLines = 1)
     }
 }
 

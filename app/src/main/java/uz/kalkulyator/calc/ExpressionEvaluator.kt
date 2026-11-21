@@ -22,7 +22,12 @@ object ExpressionEvaluator {
     private const val ZERO_EPS = 1e-12
     private const val MAX_EXACT_POWER = 9999
 
-    val FUNCTIONS = listOf("sin", "cos", "tan", "log", "ln")
+    // "tan" is kept as an alias of "tg" so expressions saved in older history still evaluate.
+    val FUNCTIONS = listOf(
+        "sin", "cos", "tg", "ctg", "tan",
+        "arcsin", "arccos", "arctg", "arcctg",
+        "log", "ln",
+    )
 
     fun evaluate(input: String, angle: AngleMode = AngleMode.DEG): BigDecimal {
         val parser = Parser(normalize(input), angle)
@@ -160,7 +165,8 @@ object ExpressionEvaluator {
             pos++
             val arg = parseGroupRest()
             return when (word) {
-                "sin", "cos", "tan" -> trig(word, arg)
+                "sin", "cos", "tg", "ctg", "tan" -> trig(word, arg)
+                "arcsin", "arccos", "arctg", "arcctg" -> inverseTrig(word, arg)
                 "log" -> logarithm(arg, Math::log10)
                 else -> logarithm(arg, Math::log)
             }
@@ -179,11 +185,30 @@ object ExpressionEvaluator {
             val result = when (name) {
                 "sin" -> Math.sin(rad)
                 "cos" -> Math.cos(rad)
+                "ctg" -> {
+                    if (abs(Math.sin(rad)) < ZERO_EPS) throw CalcException("ctg aniqlanmagan")
+                    Math.cos(rad) / Math.sin(rad)
+                }
                 else -> {
-                    if (abs(Math.cos(rad)) < ZERO_EPS) throw CalcException("tan aniqlanmagan")
+                    if (abs(Math.cos(rad)) < ZERO_EPS) throw CalcException("tg aniqlanmagan")
                     Math.tan(rad)
                 }
             }
+            return fromDouble(if (abs(result) < ZERO_EPS) 0.0 else result)
+        }
+
+        private fun inverseTrig(name: String, arg: BigDecimal): BigDecimal {
+            val x = arg.toDouble()
+            if ((name == "arcsin" || name == "arccos") && abs(x) > 1.0) {
+                throw CalcException("$name uchun son −1 dan 1 gacha bo'lishi kerak")
+            }
+            val rad = when (name) {
+                "arcsin" -> Math.asin(x)
+                "arccos" -> Math.acos(x)
+                "arctg" -> Math.atan(x)
+                else -> Math.PI / 2 - Math.atan(x)
+            }
+            val result = if (angle == AngleMode.DEG) Math.toDegrees(rad) else rad
             return fromDouble(if (abs(result) < ZERO_EPS) 0.0 else result)
         }
 

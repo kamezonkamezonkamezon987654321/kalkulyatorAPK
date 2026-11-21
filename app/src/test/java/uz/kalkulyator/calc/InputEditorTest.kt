@@ -33,6 +33,9 @@ class InputEditorTest {
     @Test fun backspace() = assertEquals("12", InputEditor.backspace("123"))
     @Test fun backspaceRemovesWholeFunction() = assertEquals("5+", InputEditor.backspace("5+sin("))
     @Test fun backspaceRemovesSqrt() = assertEquals("2×", InputEditor.backspace("2×√("))
+    @Test fun backspaceRemovesArcsinWhole() = assertEquals("2×", InputEditor.backspace("2×arcsin("))
+    @Test fun backspaceRemovesArcctgWhole() = assertEquals("", InputEditor.backspace("arcctg("))
+    @Test fun backspaceRemovesCtgWhole() = assertEquals("1+", InputEditor.backspace("1+ctg("))
 
     @Test fun functionOnEmpty() = assertEquals("sin(", InputEditor.appendFunction("", "sin"))
     @Test fun functionAfterDigitMultiplies() = assertEquals("2×cos(", InputEditor.appendFunction("2", "cos"))
